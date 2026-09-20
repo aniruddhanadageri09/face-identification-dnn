@@ -1,110 +1,86 @@
 # Face Identification DNN
 
-This project builds a face identification system using a convolutional neural network with ArcFace loss. The model learns person-specific embeddings from facial images and identifies a query face by comparing its embedding to an enrolled gallery.
+This repository contains a consent-based research/demo system for identifying an enrolled person from a face image. It uses a ResNet-50 embedding model with ArcFace training and cosine similarity matching.
 
-## Features
-- ResNet-50 backbone for face representation learning
-- ArcFace margin loss for identity separation
-- L2-normalized embedding vectors
-- Cosine similarity matching for recognition
-- Training and inference scripts
-- Folder-based dataset structure for multiple identities
-
-## Project structure
-
-```text
-face-identification-dnn/
-├── .gitignore
-├── requirements.txt
-├── README.md
-├── train.py
-├── inference.py
-├── src/
-│   ├── __init__.py
-│   ├── dataset.py
-│   ├── model.py
-│   └── utils.py
-├── data/
-│   ├── train/
-│   │   ├── person_001/
-│   │   ├── person_002/
-│   │   └── ...
-│   └── test/
-│       └── query.jpg
-└── checkpoints/
-    └── face_id_model.pth
-```
-
-## Requirements
+## Setup
 
 ```bash
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell: .venv\\Scripts\\Activate.ps1
 pip install -r requirements.txt
 ```
 
-## Dataset structure
+## Dataset
 
-Create the dataset in this format:
+Put consented face images in one folder per identity:
 
 ```text
-data/
-├── train/
-│   ├── person_001/
-│   │   ├── image_001.jpg
-│   │   ├── image_002.jpg
-│   │   └── ...
-│   ├── person_002/
-│   │   ├── image_001.jpg
-│   │   └── ...
-│   └── ...
-└── test/
-    └── query.jpg
+data/train/
+├── alice/
+│   ├── image1.jpg
+│   └── image2.jpg
+└── bob/
+    ├── image1.jpg
+    └── image2.jpg
 ```
 
-Each folder under `data/train` represents one identity.
+Put a query image at `data/test/query.jpg`. Use several varied images per identity; the dataset loader automatically assigns contiguous labels, regardless of folder names.
 
-## Training
+## Train
 
 ```bash
 python train.py
 ```
 
-This trains a `ResNet-50 + ArcFace` face recognition model.
+For a quick smoke test, edit `train.py` to use fewer epochs and a smaller batch size. Training on CPU with ResNet-50 can be slow.
 
-## Identification
+## Identify one image
 
 ```bash
-python inference.py
+python inference.py --query data/test/query.jpg --threshold 0.60
 ```
 
-The script loads the saved model and compares the query face embedding against embeddings from the training identities.
+The output is an enrolled identity or `Unknown`. Calibrate the threshold on a held-out validation set before relying on results.
 
-## Model design
+## Webcam mode
 
-```text
-Input face image (112x112x3)
-         |
-         v
-ResNet-50 backbone
-         |
-         v
-Embedding head (512-d)
-         |
-         v
-L2 normalization
-         |
-         v
-ArcFace loss
+```bash
+python webcam.py --camera 0 --threshold 0.60
 ```
 
-## Notes
-- This is a closed-set identification system.
-- For an open-set deployment, use a similarity threshold to reject unknown persons.
-- In real deployments, add face detection and landmark alignment before recognition.
-- The current project is a strong baseline for research, learning, and demo use.
+Press `q` to stop. The webcam path uses OpenCV's bundled Haar cascade for a lightweight demo. For higher accuracy, replace it with RetinaFace or SCRFD.
 
-## References
-- ArcFace: https://arxiv.org/abs/1801.07698
-- ResNet: https://arxiv.org/abs/1512.03385
+## Flask API
 
-## License
-MIT
+Start the API:
+
+```bash
+python app.py
+```
+
+Check health:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Identify an uploaded image:
+
+```bash
+curl -X POST -F "image=@data/test/query.jpg" http://127.0.0.1:8000/identify
+```
+
+Example response:
+
+```json
+{"identity":"alice","similarity":0.81}
+```
+
+## Important limitations
+
+- The repository does not include a trained checkpoint or images; those must be supplied by the user.
+- Images should contain a single, reasonably clear face. The webcam/API detects and crops the largest face.
+- This is not a production biometric system. Obtain consent, protect embeddings, restrict access, and evaluate false matches and demographic performance before any deployment.
+- Do not use the output as the sole basis for decisions about people.

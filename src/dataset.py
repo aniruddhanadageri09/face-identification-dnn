@@ -8,11 +8,15 @@ from torchvision import transforms
 
 
 class FaceDataset(Dataset):
-    """Dataset that loads a face image per identity folder."""
+    """Load images from data/train/<identity>/ and assign contiguous labels."""
 
     def __init__(self, root_dir: str, transform=None):
         self.root_dir = Path(root_dir)
+        if not self.root_dir.exists():
+            raise FileNotFoundError(f"Dataset directory not found: {self.root_dir}")
         self.transform = transform or self._default_transform()
+        class_names = sorted(p.name for p in self.root_dir.iterdir() if p.is_dir())
+        self.class_to_index = {name: index for index, name in enumerate(class_names)}
         self.samples = self._load_samples()
 
     def _default_transform(self):
@@ -24,28 +28,21 @@ class FaceDataset(Dataset):
 
     def _load_samples(self) -> List[Tuple[str, int]]:
         samples = []
-        if not self.root_dir.exists():
-            raise FileNotFoundError(f"Dataset directory not found: {self.root_dir}")
-
         for class_dir in sorted(self.root_dir.iterdir()):
             if not class_dir.is_dir():
                 continue
-
-            label = int(class_dir.name.split("_")[-1]) if class_dir.name.startswith("person_") else len(samples)
-            for img_path in sorted(class_dir.iterdir()):
-                if img_path.is_file() and img_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}:
-                    samples.append((str(img_path), label))
-
+            label = self.class_to_index[class_dir.name]
+            for image_path in sorted(class_dir.iterdir()):
+                if image_path.is_file() and image_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}:
+                    samples.append((str(image_path), label))
         if not samples:
             raise ValueError(f"No usable images found in dataset: {self.root_dir}")
-
         return samples
 
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, idx):
-        img_path, label = self.samples[idx]
-        image = Image.open(img_path).convert("RGB")
-        image = self.transform(image)
-        return image, label
+    def __getitem__(self, index):
+        image_path, label = self.samples[index]
+        image = Image.open(image_path).convert("RGB")
+        return self.transform(image), label
